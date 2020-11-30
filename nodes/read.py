@@ -59,50 +59,49 @@ def draw_contours_bw(image, contours):
     cv2.drawContours(image, contours, -1, 255, 1)
 
 
+def preprocessing(image):
+    return cv2.split(
+        cv2.cvtColor(
+            cv2.resize(image, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA),
+            cv2.COLOR_BGR2Lab,
         )
     )
 
 
+scale = 0.5
+
 letters = [
-    cv2.split(
-        cv2.cvtColor(
-            util.imread(
-                os.path.expanduser(
-                    "~/ros_ws/src/hippos/nodes/templates/letter_{}.png".format(l)
-                )
-            ),
-            cv2.COLOR_BGR2Lab,
+    preprocessing(
+        util.imread(
+            os.path.expanduser(
+                "~/ros_ws/src/hippos/nodes/templates/letter_{}.png".format(l)
+            )
         )
     )[2]
     for l in string.ascii_uppercase
 ]
 numbers = [
-    cv2.split(
-        cv2.cvtColor(
-            util.imread(
-                os.path.expanduser(
-                    "~/ros_ws/src/hippos/nodes/templates/number_{}.png".format(d)
-                )
-            ),
-            cv2.COLOR_BGR2Lab,
+    preprocessing(
+        util.imread(
+            os.path.expanduser(
+                "~/ros_ws/src/hippos/nodes/templates/number_{}.png".format(d)
+            )
         )
     )[2]
     for d in string.digits
 ]
 locations = [
-    cv2.split(
-        cv2.cvtColor(
-            util.imread(
-                os.path.expanduser(
-                    "~/ros_ws/src/hippos/nodes/templates/location_{}.png".format(n)
-                )
-            ),
-            cv2.COLOR_BGR2Lab,
+    preprocessing(
+        util.imread(
+            os.path.expanduser(
+                "~/ros_ws/src/hippos/nodes/templates/location_{}.png".format(n)
+            )
         )
     )[0]
     for n in string.digits[1:9]
 ]
-original_shape = (1800, 600)
+
+original_shape = (int(1800 * scale), int(600 * scale))
 
 MATCH_THRESHOLD = 0.8
 
@@ -115,6 +114,18 @@ def class_matches(correlations, classes):
     return predictions
 
 
+def location_slice(image):
+    return image[image.shape[0] / 3 : image.shape[0] * 2 / 3, image.shape[1] / 2 :]
+
+
+def letter_slice(image):
+    return image[image.shape[0] * 2 / 3 :, : image.shape[1] / 2]
+
+
+def number_slice(image):
+    return image[image.shape[0] * 2 / 3 :, image.shape[1] / 2 :]
+
+
 def predict(image):
     bottom = image[300:]
     grey = light_grey(bottom)
@@ -123,7 +134,7 @@ def predict(image):
     contours = filter_contours(find_contours(plates))
     edges = np.zeros(bottom.shape[:2]).astype(np.uint8)
     draw_contours_bw(edges, contours)
-    lines = cv2.HoughLines(edges, 1, np.pi / 30, 25)
+    lines = cv2.HoughLines(edges, 1, np.pi / 30, 20)
     if lines is None:
         return []
 
@@ -140,7 +151,9 @@ def predict(image):
         location_correlation = []
         for location in locations:
             correlation = cv2.matchTemplate(
-                warped_l[600:1200], location, cv2.TM_CCOEFF_NORMED
+                location_slice(warped_l),
+                location,
+                cv2.TM_CCOEFF_NORMED,
             )
             location_correlation.append(correlation.max())
 
@@ -152,7 +165,7 @@ def predict(image):
         letter2_correlation = []
         for letter in letters:
             correlation = cv2.matchTemplate(
-                warped_b[1200:, :300], letter, cv2.TM_CCOEFF_NORMED
+                letter_slice(warped_b), letter, cv2.TM_CCOEFF_NORMED
             )
             half = correlation.shape[1] // 2
             letter1_correlation.append(correlation[:, :half].max())
@@ -165,7 +178,7 @@ def predict(image):
         number2_correlation = []
         for number in numbers:
             correlation = cv2.matchTemplate(
-                warped_b[1200:, 300:], number, cv2.TM_CCOEFF_NORMED
+                number_slice(warped_b), number, cv2.TM_CCOEFF_NORMED
             )
             half = correlation.shape[1] // 2
             number1_correlation.append(correlation[:, :half].max())
