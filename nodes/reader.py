@@ -4,6 +4,7 @@
 Subscribe to license plate image topics and itentify them with a neural network.
 """
 
+import datetime
 import time
 
 import rospy
@@ -20,8 +21,8 @@ bridge = cv_bridge.CvBridge()
 def process_frame(ros_image, score):
     frame = bridge.imgmsg_to_cv2(ros_image, "bgr8")
     predictions = read.predict(frame)
+    print("{} {}".format(datetime.datetime.now().isoformat(), predictions))
     for prediction in predictions:
-        print(prediction)
         score.publish(util.plate_message(prediction[0], prediction[1]))
 
 
