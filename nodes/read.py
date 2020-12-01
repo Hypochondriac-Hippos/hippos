@@ -19,11 +19,8 @@ import rectangles
 import util
 
 
-def light_grey(image, blur_sigma=0.5, s_max=20, v_min=84):
+def light_grey(image, s_max=20, v_min=90):
     _, s, v = cv2.split(cv2.cvtColor(image, cv2.COLOR_BGR2HSV))
-    if blur_sigma is not None:
-        s = scipy.ndimage.gaussian_filter(s, blur_sigma)
-        v = scipy.ndimage.gaussian_filter(v, blur_sigma)
 
     return np.logical_and(s < s_max, v > v_min)
 
@@ -51,8 +48,15 @@ def filter_contours(contours, min_area=500, min_solidity=0.7):
     return [
         c
         for c in contours
-        if cv2.contourArea(c) > min_area and solidity(c) > min_solidity
+        if cv2.contourArea(c) > min_area
+        and aspect_ratio(c) < 4
+        and solidity(c) > min_solidity
     ]
+
+
+def aspect_ratio(c):
+    _, (w, h), _ = cv2.minAreaRect(c)
+    return max(w, h) / min(w, h)
 
 
 def solidity(c):
@@ -165,6 +169,7 @@ def random_colour():
 
 
 fill_pub = rospy.Publisher("/hippos/debug/filled", sensor_msgs.msg.Image, queue_size=1)
+edge_pub = rospy.Publisher("/hippos/debug/edges", sensor_msgs.msg.Image, queue_size=1)
 line_pub = rospy.Publisher("/hippos/debug/lines", sensor_msgs.msg.Image, queue_size=1)
 rect_pub = rospy.Publisher("/hippos/debug/rects", sensor_msgs.msg.Image, queue_size=1)
 bridge = cv_bridge.CvBridge()
@@ -180,72 +185,69 @@ def predict(image, debug=False):
     contours = filter_contours(find_contours(plates))
     edges = np.zeros(bottom.shape[:2]).astype(np.uint8)
     draw_contours_bw(edges, contours)
+    if debug:
+        edge_pub.publish(bridge.cv2_to_imgmsg(edges))
+
     lines = cv2.HoughLines(edges, 1, np.pi / 30, 20)
     if lines is None:
-        return []
+        return
     if debug:
         line_pub.publish(
             bridge.cv2_to_imgmsg(draw_lines(bottom, lines), encoding="bgr8")
         )
 
     rects = rectangles.rects_from_lines(lines)
-    filtered = list(filter(lambda r: rectangles.edge_score(r, edges) > 0.8, rects))
+    rect = rectangles.take_max_edge_score(rects, edges)
+    if rect is None:
+        return
     if debug:
         rect_pub.publish(
-            bridge.cv2_to_imgmsg(draw_rects(bottom, filtered), encoding="bgr8")
+            bridge.cv2_to_imgmsg(draw_rects(bottom, [rect]), encoding="bgr8")
         )
 
-    predictions = []
-    predicted_locs = []
     l, a, b = cv2.split(cv2.cvtColor(bottom, cv2.COLOR_BGR2Lab))
-    for rect in filtered:
-        warped = rectangles.transform_to_rect(rect, l, original_shape)
-        location_correlation = []
-        for location in locations:
-            correlation = cv2.matchTemplate(
-                location_slice(warped),
-                location,
-                cv2.TM_CCOEFF_NORMED,
-            )
-            location_correlation.append(correlation.max())
+    warped = rectangles.transform_to_rect(rect, l, original_shape)
+    location_correlation = []
+    for location in locations:
+        correlation = cv2.matchTemplate(
+            location_slice(warped),
+            location,
+            cv2.TM_CCOEFF_NORMED,
+        )
+        location_correlation.append(correlation.max())
 
-        loc = class_matches(location_correlation, string.digits[1:9])
-        if loc is None:
-            continue
+    loc = class_matches(location_correlation, string.digits[1:9])
+    if loc is None:
+        return
 
-        letter1_correlation = []
-        letter2_correlation = []
-        for letter in letters:
-            correlation = cv2.matchTemplate(
-                letter_slice(warped), letter, cv2.TM_CCOEFF_NORMED
-            )
-            half = correlation.shape[1] // 2
-            letter1_correlation.append(correlation[:, :half].max())
-            letter2_correlation.append(correlation[:, half:].max())
+    number1_correlation = []
+    number2_correlation = []
+    for number in numbers:
+        correlation = cv2.matchTemplate(
+            number_slice(warped), number, cv2.TM_CCOEFF_NORMED
+        )
+        half = correlation.shape[1] // 2
+        number1_correlation.append(correlation[:, :half].max())
+        number2_correlation.append(correlation[:, half:].max())
 
-        letter1 = class_matches(letter1_correlation, string.ascii_uppercase)
-        letter2 = class_matches(letter2_correlation, string.ascii_uppercase)
+    number1 = class_matches(number1_correlation, string.digits)
+    number2 = class_matches(number2_correlation, string.digits)
 
-        number1_correlation = []
-        number2_correlation = []
-        for number in numbers:
-            correlation = cv2.matchTemplate(
-                number_slice(warped), number, cv2.TM_CCOEFF_NORMED
-            )
-            half = correlation.shape[1] // 2
-            number1_correlation.append(correlation[:, :half].max())
-            number2_correlation.append(correlation[:, half:].max())
+    if number1 is None or number2 is None:
+        return
 
-        number1 = class_matches(number1_correlation, string.digits)
-        number2 = class_matches(number2_correlation, string.digits)
+    letter1_correlation = []
+    letter2_correlation = []
+    for letter in letters:
+        correlation = cv2.matchTemplate(
+            letter_slice(warped), letter, cv2.TM_CCOEFF_NORMED
+        )
+        half = correlation.shape[1] // 2
+        letter1_correlation.append(correlation[:, :half].max())
+        letter2_correlation.append(correlation[:, half:].max())
 
-        if (
-            letter1 is not None
-            and letter2 is not None
-            and number1 is not None
-            and number2 is not None
-        ):
-            predictions.append((loc, "".join((letter1, letter2, number1, number2))))
-            predicted_locs.append(loc[0])
+    letter1 = class_matches(letter1_correlation, string.ascii_uppercase)
+    letter2 = class_matches(letter2_correlation, string.ascii_uppercase)
 
-    return predictions
+    if letter1 is not None and letter2 is not None:
+        return (loc, "".join((letter1, letter2, number1, number2)))

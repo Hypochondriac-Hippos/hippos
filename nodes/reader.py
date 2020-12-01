@@ -20,9 +20,9 @@ bridge = cv_bridge.CvBridge()
 
 def process_frame(ros_image, score):
     frame = bridge.imgmsg_to_cv2(ros_image, "bgr8")
-    predictions = read.predict(frame, debug=True)
-    print("{} {}".format(datetime.datetime.now().isoformat(), predictions))
-    for prediction in predictions:
+    prediction = read.predict(frame, debug=True)
+    print("{} {}".format(datetime.datetime.now().isoformat(), prediction))
+    if prediction is not None:
         score.publish(util.plate_message(prediction[0], prediction[1]))
 
 

@@ -41,7 +41,6 @@ def partition(pred, iterable):
 
 def rects_from_lines(lines):
     horizontal, vertical = partition(lambda l: abs(l[0][1]) < np.pi / 6, lines)
-    rects = []
     for (h1, h2), (v1, v2) in it.product(
         it.combinations(horizontal, 2), it.combinations(vertical, 2)
     ):
@@ -56,9 +55,7 @@ def rects_from_lines(lines):
                 intersection(h2, v1),
             ]
         )
-        rects.append(sort_vertices(corners))
-
-    return np.asarray(rects)
+        yield sort_vertices(corners)
 
 
 def sort_vertices(points):
@@ -83,6 +80,18 @@ def edge_score(rect, edges):
     if arc < 1:
         return 0
     return np.count_nonzero(matching_edges) / arc
+
+
+def take_max_edge_score(rects, edges):
+    best = None
+    maximum = None
+    for r in rects:
+        score = edge_score(r, edges)
+        if maximum is None or score > maximum:
+            best = r
+            maximum = score
+
+    return best
 
 
 def transform_to_rect(rect, original, output_shape):
