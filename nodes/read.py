@@ -107,11 +107,9 @@ MATCH_THRESHOLD = 0.8
 
 
 def class_matches(correlations, classes):
-    predictions = []
-    for i, corr in enumerate(correlations):
-        if corr > MATCH_THRESHOLD:
-            predictions.append(classes[i])
-    return predictions
+    i = np.argmax(correlations)
+    if correlations[i] > MATCH_THRESHOLD:
+        return classes[i]
 
 
 def location_slice(image):
@@ -140,7 +138,6 @@ def predict(image):
 
     rects = rectangles.rects_from_lines(lines)
     filtered = list(filter(lambda r: rectangles.edge_score(r, edges) > 0.8, rects))
-
     predictions = []
     predicted_locs = []
     l, a, b = cv2.split(cv2.cvtColor(bottom, cv2.COLOR_BGR2Lab))
@@ -158,7 +155,7 @@ def predict(image):
             location_correlation.append(correlation.max())
 
         loc = class_matches(location_correlation, string.digits[1:9])
-        if len(loc) != 1 or loc[0] in predicted_locs:
+        if loc is None:
             continue
 
         letter1_correlation = []
@@ -187,10 +184,13 @@ def predict(image):
         number1 = class_matches(number1_correlation, string.digits)
         number2 = class_matches(number2_correlation, string.digits)
 
-        if len(letter1) == len(letter2) == len(number1) == len(number2) == 1:
-            predictions.append(
-                (loc[0], "".join((letter1[0], letter2[0], number1[0], number2[0])))
-            )
+        if (
+            letter1 is not None
+            and letter2 is not None
+            and number1 is not None
+            and number2 is not None
+        ):
+            predictions.append((loc, "".join((letter1, letter2, number1, number2))))
             predicted_locs.append(loc[0])
 
     return predictions
