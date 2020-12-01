@@ -5,10 +5,14 @@ Read license plates.
 """
 
 import os.path
+import random
 import string
 
 import cv2
+import cv_bridge
 import numpy as np
+import rospy
+import sensor_msgs
 import scipy.ndimage
 
 import rectangles
@@ -124,10 +128,54 @@ def number_slice(image):
     return image[image.shape[0] * 2 / 3 :, image.shape[1] / 2 :]
 
 
-def predict(image):
+def draw_lines(image, lines):
+    draw = image.copy()
+    for line in lines:
+        rho, theta = line[0]
+        a = np.cos(theta)
+        b = np.sin(theta)
+        if abs(theta) < np.pi / 6:
+            colour = (255, 0, 0)
+        else:
+            colour = (0, 0, 255)
+        x0 = a * rho
+        y0 = b * rho
+        x1 = int(x0 + 1000 * (-b))
+        y1 = int(y0 + 1000 * (a))
+        x2 = int(x0 - 1000 * (-b))
+        y2 = int(y0 - 1000 * (a))
+        cv2.line(draw, (x1, y1), (x2, y2), colour, 2)
+    return draw
+
+
+def draw_rects(image, rects):
+    draw = image.copy()
+    for r in rects:
+        perturbation = [random.randint(-3, 3), random.randint(-3, 3)]  # Reduce overlap
+        draw = cv2.polylines(draw, [r + perturbation], True, random_colour(), 2)
+    return draw
+
+
+def random_colour():
+    h = random.randint(0, 255)
+    s = random.randint(127, 255)
+    v = random.randint(127, 255)
+    point = np.uint8([[[h, s, v]]])
+    return tuple(int(c) for c in cv2.cvtColor(point, cv2.COLOR_HSV2BGR)[0, 0])
+
+
+fill_pub = rospy.Publisher("/hippos/debug/filled", sensor_msgs.msg.Image, queue_size=1)
+line_pub = rospy.Publisher("/hippos/debug/lines", sensor_msgs.msg.Image, queue_size=1)
+rect_pub = rospy.Publisher("/hippos/debug/rects", sensor_msgs.msg.Image, queue_size=1)
+bridge = cv_bridge.CvBridge()
+
+
+def predict(image, debug=False):
     bottom = image[300:]
     grey = light_grey(bottom)
     plates = fill_holes(grey)
+    if debug:
+        fill_pub.publish(bridge.cv2_to_imgmsg(plates.astype(np.uint8) * 255))
 
     contours = filter_contours(find_contours(plates))
     edges = np.zeros(bottom.shape[:2]).astype(np.uint8)
@@ -135,9 +183,18 @@ def predict(image):
     lines = cv2.HoughLines(edges, 1, np.pi / 30, 20)
     if lines is None:
         return []
+    if debug:
+        line_pub.publish(
+            bridge.cv2_to_imgmsg(draw_lines(bottom, lines), encoding="bgr8")
+        )
 
     rects = rectangles.rects_from_lines(lines)
     filtered = list(filter(lambda r: rectangles.edge_score(r, edges) > 0.8, rects))
+    if debug:
+        rect_pub.publish(
+            bridge.cv2_to_imgmsg(draw_rects(bottom, filtered), encoding="bgr8")
+        )
+
     predictions = []
     predicted_locs = []
     l, a, b = cv2.split(cv2.cvtColor(bottom, cv2.COLOR_BGR2Lab))
