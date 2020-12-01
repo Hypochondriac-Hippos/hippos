@@ -65,7 +65,7 @@ def preprocessing(image):
             cv2.resize(image, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA),
             cv2.COLOR_BGR2Lab,
         )
-    )
+    )[0]
 
 
 scale = 0.5
@@ -77,7 +77,7 @@ letters = [
                 "~/ros_ws/src/hippos/nodes/templates/letter_{}.png".format(l)
             )
         )
-    )[2]
+    )
     for l in string.ascii_uppercase
 ]
 numbers = [
@@ -87,7 +87,7 @@ numbers = [
                 "~/ros_ws/src/hippos/nodes/templates/number_{}.png".format(d)
             )
         )
-    )[2]
+    )
     for d in string.digits
 ]
 locations = [
@@ -97,7 +97,7 @@ locations = [
                 "~/ros_ws/src/hippos/nodes/templates/location_{}.png".format(n)
             )
         )
-    )[0]
+    )
     for n in string.digits[1:9]
 ]
 
@@ -142,13 +142,11 @@ def predict(image):
     predicted_locs = []
     l, a, b = cv2.split(cv2.cvtColor(bottom, cv2.COLOR_BGR2Lab))
     for rect in filtered:
-        warped_l = rectangles.transform_to_rect(rect, l, original_shape)
-        warped_b = rectangles.transform_to_rect(rect, b, original_shape)
-
+        warped = rectangles.transform_to_rect(rect, l, original_shape)
         location_correlation = []
         for location in locations:
             correlation = cv2.matchTemplate(
-                location_slice(warped_l),
+                location_slice(warped),
                 location,
                 cv2.TM_CCOEFF_NORMED,
             )
@@ -162,7 +160,7 @@ def predict(image):
         letter2_correlation = []
         for letter in letters:
             correlation = cv2.matchTemplate(
-                letter_slice(warped_b), letter, cv2.TM_CCOEFF_NORMED
+                letter_slice(warped), letter, cv2.TM_CCOEFF_NORMED
             )
             half = correlation.shape[1] // 2
             letter1_correlation.append(correlation[:, :half].max())
@@ -175,7 +173,7 @@ def predict(image):
         number2_correlation = []
         for number in numbers:
             correlation = cv2.matchTemplate(
-                number_slice(warped_b), number, cv2.TM_CCOEFF_NORMED
+                number_slice(warped), number, cv2.TM_CCOEFF_NORMED
             )
             half = correlation.shape[1] // 2
             number1_correlation.append(correlation[:, :half].max())
