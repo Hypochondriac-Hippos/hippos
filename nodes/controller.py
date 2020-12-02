@@ -18,7 +18,7 @@ def plate_message(location, plate_number):
 
 
 if __name__ == "__main__":
-    rospy.init_node("time_trials", anonymous=True)
+    rospy.init_node("controller", anonymous=True)
     plates = rospy.Publisher(topics.plates, std_msgs.msg.String, queue_size=1)
     drive = rospy.Publisher(topics.drive, Twist, queue_size=1)
 

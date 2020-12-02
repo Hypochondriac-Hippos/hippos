@@ -1,4 +1,4 @@
 <launch>
   <node pkg="hippos" type="reader.py" name="reader" output="screen" />
-  <node pkg="hippos" type="time_trials.py" name="time_trials" output="screen" />
+  <node pkg="hippos" type="controller.py" name="controller" output="screen" />
 </launch>
