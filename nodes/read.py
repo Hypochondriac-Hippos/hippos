@@ -5,66 +5,13 @@ Read license plates.
 """
 
 import os.path
-import random
 import string
 
 import cv2
-import cv_bridge
 import numpy as np
-import rospy
-import sensor_msgs
-import scipy.ndimage
 
-import rectangles
+from rectangles import sort_vertices
 import util
-
-
-def light_grey(image, s_max=20, v_min=90):
-    _, s, v = cv2.split(cv2.cvtColor(image, cv2.COLOR_BGR2HSV))
-
-    return np.logical_and(s < s_max, v > v_min)
-
-
-def fill_holes(image, dilation=2):
-    if dilation is not None:
-        v_struct = np.zeros((3, 3))
-        v_struct[:, 1] = 1
-        dilated = scipy.ndimage.binary_dilation(image, v_struct, iterations=dilation)
-        filled = scipy.ndimage.binary_fill_holes(dilated)
-        out = scipy.ndimage.binary_erosion(filled, v_struct, iterations=dilation + 1)
-    else:
-        out = scipy.ndimage.binary_fill_holes(image)
-
-    return out
-
-
-def find_contours(binary):
-    return cv2.findContours(
-        binary.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE
-    )[1]
-
-
-def filter_contours(contours, min_area=500, min_solidity=0.7):
-    return [
-        c
-        for c in contours
-        if cv2.contourArea(c) > min_area
-        and aspect_ratio(c) < 4
-        and solidity(c) > min_solidity
-    ]
-
-
-def aspect_ratio(c):
-    _, (w, h), _ = cv2.minAreaRect(c)
-    return max(w, h) / min(w, h)
-
-
-def solidity(c):
-    return cv2.contourArea(c) / cv2.contourArea(cv2.convexHull(c))
-
-
-def draw_contours_bw(image, contours):
-    cv2.drawContours(image, contours, -1, 255, 1)
 
 
 def preprocessing(image):
@@ -114,6 +61,23 @@ original_shape = (int(1800 * scale), int(600 * scale))
 MATCH_THRESHOLD = 0.8
 
 
+def transform_to_rect(rect, original, output_shape):
+    output_points = sort_vertices(
+        np.asarray(
+            [
+                [0, 0],
+                [output_shape[1], 0],
+                [output_shape[1], output_shape[0]],
+                [0, output_shape[0]],
+            ]
+        )
+    ).astype(np.float32)
+    transform = cv2.getPerspectiveTransform(rect.astype(np.float32), output_points)
+    return cv2.warpPerspective(
+        original, transform, output_shape[1::-1], flags=cv2.INTER_CUBIC
+    )
+
+
 def class_matches(correlations, classes):
     i = np.argmax(correlations)
     if correlations[i] > MATCH_THRESHOLD:
@@ -132,81 +96,9 @@ def number_slice(image):
     return image[image.shape[0] * 2 / 3 :, image.shape[1] / 2 :]
 
 
-def draw_lines(image, lines):
-    draw = image.copy()
-    for line in lines:
-        rho, theta = line[0]
-        a = np.cos(theta)
-        b = np.sin(theta)
-        if abs(theta) < np.pi / 6:
-            colour = (255, 0, 0)
-        else:
-            colour = (0, 0, 255)
-        x0 = a * rho
-        y0 = b * rho
-        x1 = int(x0 + 1000 * (-b))
-        y1 = int(y0 + 1000 * (a))
-        x2 = int(x0 - 1000 * (-b))
-        y2 = int(y0 - 1000 * (a))
-        cv2.line(draw, (x1, y1), (x2, y2), colour, 2)
-    return draw
-
-
-def draw_rects(image, rects):
-    draw = image.copy()
-    for r in rects:
-        perturbation = [random.randint(-3, 3), random.randint(-3, 3)]  # Reduce overlap
-        draw = cv2.polylines(draw, [r + perturbation], True, random_colour(), 2)
-    return draw
-
-
-def random_colour():
-    h = random.randint(0, 255)
-    s = random.randint(127, 255)
-    v = random.randint(127, 255)
-    point = np.uint8([[[h, s, v]]])
-    return tuple(int(c) for c in cv2.cvtColor(point, cv2.COLOR_HSV2BGR)[0, 0])
-
-
-fill_pub = rospy.Publisher("/hippos/debug/filled", sensor_msgs.msg.Image, queue_size=1)
-edge_pub = rospy.Publisher("/hippos/debug/edges", sensor_msgs.msg.Image, queue_size=1)
-line_pub = rospy.Publisher("/hippos/debug/lines", sensor_msgs.msg.Image, queue_size=1)
-rect_pub = rospy.Publisher("/hippos/debug/rects", sensor_msgs.msg.Image, queue_size=1)
-bridge = cv_bridge.CvBridge()
-
-
-def predict(image, debug=False):
-    bottom = image[300:]
-    grey = light_grey(bottom)
-    plates = fill_holes(grey)
-    if debug:
-        fill_pub.publish(bridge.cv2_to_imgmsg(plates.astype(np.uint8) * 255))
-
-    contours = filter_contours(find_contours(plates))
-    edges = np.zeros(bottom.shape[:2]).astype(np.uint8)
-    draw_contours_bw(edges, contours)
-    if debug:
-        edge_pub.publish(bridge.cv2_to_imgmsg(edges))
-
-    lines = cv2.HoughLines(edges, 1, np.pi / 30, 20)
-    if lines is None:
-        return
-    if debug:
-        line_pub.publish(
-            bridge.cv2_to_imgmsg(draw_lines(bottom, lines), encoding="bgr8")
-        )
-
-    rects = rectangles.rects_from_lines(lines)
-    rect = rectangles.take_max_edge_score(rects, edges)
-    if rect is None:
-        return
-    if debug:
-        rect_pub.publish(
-            bridge.cv2_to_imgmsg(draw_rects(bottom, [rect]), encoding="bgr8")
-        )
-
+def predict(rect, bottom, debug=False):
     l, a, b = cv2.split(cv2.cvtColor(bottom, cv2.COLOR_BGR2Lab))
-    warped = rectangles.transform_to_rect(rect, l, original_shape)
+    warped = transform_to_rect(rect, l, original_shape)
     location_correlation = []
     for location in locations:
         correlation = cv2.matchTemplate(

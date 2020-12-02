@@ -8,7 +8,6 @@ import datetime
 import time
 
 import rospy
-import sensor_msgs
 import std_msgs
 import cv_bridge
 
@@ -18,9 +17,10 @@ import util
 bridge = cv_bridge.CvBridge()
 
 
-def process_frame(ros_image, score):
-    frame = bridge.imgmsg_to_cv2(ros_image, "bgr8")
-    prediction = read.predict(frame, debug=True)
+def process_frame(in_msg, score):
+    rects, bottom = util.destringify(in_msg)
+    prediction = read.predict(rects, bottom, debug=True)
+
     print("{} {}".format(datetime.datetime.now().isoformat(), prediction))
     if prediction is not None:
         score.publish(util.plate_message(prediction[0], prediction[1]))
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     rospy.init_node("reader", anonymous=True)
     score = rospy.Publisher(util.topics.plates, std_msgs.msg.String, queue_size=1)
     rospy.Subscriber(
-        util.topics.camera, sensor_msgs.msg.Image, process_frame, callback_args=score
+        util.plate_topics.rects, std_msgs.msg.String, process_frame, callback_args=score
     )
 
     time.sleep(1)
