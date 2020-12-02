@@ -84,26 +84,6 @@ def number_slice(image):
     return image[image.shape[0] * 2 / 3 :, image.shape[1] / 2 :]
 
 
-def draw_lines(image, lines):
-    draw = image.copy()
-    for line in lines:
-        rho, theta = line[0]
-        a = np.cos(theta)
-        b = np.sin(theta)
-        if abs(theta) < np.pi / 6:
-            colour = (255, 0, 0)
-        else:
-            colour = (0, 0, 255)
-        x0 = a * rho
-        y0 = b * rho
-        x1 = int(x0 + 1000 * (-b))
-        y1 = int(y0 + 1000 * (a))
-        x2 = int(x0 - 1000 * (-b))
-        y2 = int(y0 - 1000 * (a))
-        cv2.line(draw, (x1, y1), (x2, y2), colour, 2)
-    return draw
-
-
 def draw_rects(image, rects):
     draw = image.copy()
     for r in rects:
@@ -120,20 +100,11 @@ def random_colour():
     return tuple(int(c) for c in cv2.cvtColor(point, cv2.COLOR_HSV2BGR)[0, 0])
 
 
-line_pub = rospy.Publisher("/hippos/debug/lines", sensor_msgs.msg.Image, queue_size=1)
 rect_pub = rospy.Publisher("/hippos/debug/rects", sensor_msgs.msg.Image, queue_size=1)
 bridge = cv_bridge.CvBridge()
 
 
-def predict(edges, bottom, debug=False):
-    lines = cv2.HoughLines(edges, 1, np.pi / 30, 20)
-    if lines is None:
-        return
-    if debug:
-        line_pub.publish(
-            bridge.cv2_to_imgmsg(draw_lines(bottom, lines), encoding="bgr8")
-        )
-
+def predict(lines, edges, bottom, debug=False):
     rects = rectangles.rects_from_lines(lines)
     rect = rectangles.take_max_edge_score(rects, edges)
     if rect is None:

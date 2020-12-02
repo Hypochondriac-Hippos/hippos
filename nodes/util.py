@@ -10,7 +10,9 @@ topics = namedtuple("Topics", ("camera", "clock", "drive", "plates"))(
     "/R1/pi_camera/image_raw", "/clock", "/R1/cmd_vel", "/license_plate"
 )
 
-plate_topics = namedtuple("PlateTopics", ("edges"))("/hippos/plate/edges")
+plate_topics = namedtuple("PlateTopics", ("edges", "lines"))(
+    "/hippos/plate/edges", "/hippos/plate/lines"
+)
 
 
 def plate_message(location, plate_number):
