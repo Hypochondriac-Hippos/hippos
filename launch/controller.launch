@@ -3,5 +3,6 @@
   <node pkg="hippos" type="lines.py" name="lines" output="screen" />
   <node pkg="hippos" type="rectangles.py" name="rects" output="screen" />
   <node pkg="hippos" type="reader.py" name="reader" output="screen" />
+  <node pkg="hippos" type="pedestrian.py" name="pedestrian" output="screen" />
   <node pkg="hippos" type="controller.py" name="controller" output="screen" />
 </launch>
