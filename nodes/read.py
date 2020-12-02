@@ -58,7 +58,7 @@ locations = [
 
 original_shape = (int(1800 * scale), int(600 * scale))
 
-MATCH_THRESHOLD = 0.8
+MATCH_THRESHOLD = 0.75
 
 
 def transform_to_rect(rect, original, output_shape):

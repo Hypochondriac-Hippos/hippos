@@ -22,10 +22,13 @@ edge_debug = rospy.Publisher("/hippos/debug/edges", sensor_msgs.msg.Image, queue
 edge_pub = rospy.Publisher(util.plate_topics.edges, std_msgs.msg.String, queue_size=1)
 
 
-def light_grey(image, s_max=20, v_min=90):
+def light_grey(image, blur_sigma=0.5, s_max=20, v_min=87, v_max=240):
     _, s, v = cv2.split(cv2.cvtColor(image, cv2.COLOR_BGR2HSV))
+    if blur_sigma is not None:
+        s = scipy.ndimage.gaussian_filter(s, blur_sigma)
+        v = scipy.ndimage.gaussian_filter(v, blur_sigma)
 
-    return np.logical_and(s < s_max, v > v_min)
+    return np.logical_and(s < s_max, np.logical_and(v_min < v, v < v_max))
 
 
 def fill_holes(image, dilation=2):
