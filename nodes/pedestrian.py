@@ -45,6 +45,13 @@ def process_frame(ros_image, debug=True):
     if np.count_nonzero(red) > 10:
         top = min(np.nonzero(red)[0])
         bottom = max(np.nonzero(red)[0])
+
+        top_line = red[top : top + 10]
+        bottom_line = red[bottom - 50 : bottom]
+        if len(top_line) == 0 or len(bottom_line == 0):
+            warning.publish(util.stringify(False))
+            return
+
         top_left = min(np.nonzero(red[top : top + 10])[1])
         top_right = max(np.nonzero(red[top : top + 10])[1])
         bottom_left = min(np.nonzero(red[bottom - 50 : bottom])[1])
