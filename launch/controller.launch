@@ -1,5 +1,6 @@
 <launch>
   <node pkg="hippos" type="edges.py" name="edges" output="screen" />
   <node pkg="hippos" type="lines.py" name="lines" output="screen" />
+  <node pkg="hippos" type="rectangles.py" name="rects" output="screen" />
   <node pkg="hippos" type="reader.py" name="reader" output="screen" />
 </launch>

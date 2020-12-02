@@ -10,8 +10,8 @@ topics = namedtuple("Topics", ("camera", "clock", "drive", "plates"))(
     "/R1/pi_camera/image_raw", "/clock", "/R1/cmd_vel", "/license_plate"
 )
 
-plate_topics = namedtuple("PlateTopics", ("edges", "lines"))(
-    "/hippos/plate/edges", "/hippos/plate/lines"
+plate_topics = namedtuple("PlateTopics", ("edges", "lines", "rects"))(
+    "/hippos/plate/edges", "/hippos/plate/lines", "/hippos/plate/rects"
 )
 
 

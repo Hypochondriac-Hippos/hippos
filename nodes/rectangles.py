@@ -5,9 +5,20 @@ Rectangle functions
 """
 
 import itertools as it
+import random
+import time
 
 import cv2
+import cv_bridge
 import numpy as np
+import rospy
+import sensor_msgs
+import std_msgs
+
+import util
+
+rect_debug = rospy.Publisher("/hippos/debug/rects", sensor_msgs.msg.Image, queue_size=1)
+rect_pub = rospy.Publisher(util.plate_topics.rects, std_msgs.msg.String, queue_size=1)
 
 
 def intersection(line1, line2):
@@ -94,18 +105,46 @@ def take_max_edge_score(rects, edges):
     return best
 
 
-def transform_to_rect(rect, original, output_shape):
-    output_points = sort_vertices(
-        np.asarray(
-            [
-                [0, 0],
-                [output_shape[1], 0],
-                [output_shape[1], output_shape[0]],
-                [0, output_shape[0]],
-            ]
+def draw_rects(image, rects):
+    draw = image.copy()
+    for r in rects:
+        perturbation = [random.randint(-3, 3), random.randint(-3, 3)]  # Reduce overlap
+        draw = cv2.polylines(draw, [r + perturbation], True, random_colour(), 2)
+    return draw
+
+
+def random_colour():
+    h = random.randint(0, 255)
+    s = random.randint(127, 255)
+    v = random.randint(127, 255)
+    point = np.uint8([[[h, s, v]]])
+    return tuple(int(c) for c in cv2.cvtColor(point, cv2.COLOR_HSV2BGR)[0, 0])
+
+
+bridge = cv_bridge.CvBridge()
+
+
+def find_best_rect(lines, edges, bottom, debug=False):
+    rects = rects_from_lines(lines)
+    rect = take_max_edge_score(rects, edges)
+    if rect is None:
+        return
+    if debug:
+        rect_debug.publish(
+            bridge.cv2_to_imgmsg(draw_rects(bottom, [rect]), encoding="bgr8")
         )
-    ).astype(np.float32)
-    transform = cv2.getPerspectiveTransform(rect.astype(np.float32), output_points)
-    return cv2.warpPerspective(
-        original, transform, output_shape[1::-1], flags=cv2.INTER_CUBIC
-    )
+
+    rect_pub.publish(util.stringify((rect, bottom)))
+
+
+def process_frame(in_msg):
+    lines, edges, bottoms = util.destringify(in_msg)
+    find_best_rect(lines, edges, bottoms, debug=True)
+
+
+if __name__ == "__main__":
+    rospy.init_node("rects", anonymous=True)
+    rospy.Subscriber(util.plate_topics.lines, std_msgs.msg.String, process_frame)
+    time.sleep(1)
+
+    rospy.spin()

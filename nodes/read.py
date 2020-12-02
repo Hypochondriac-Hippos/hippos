@@ -5,17 +5,12 @@ Read license plates.
 """
 
 import os.path
-import random
 import string
 
 import cv2
-import cv_bridge
 import numpy as np
-import rospy
-import sensor_msgs
-import scipy.ndimage
 
-import rectangles
+from rectangles import sort_vertices
 import util
 
 
@@ -66,6 +61,23 @@ original_shape = (int(1800 * scale), int(600 * scale))
 MATCH_THRESHOLD = 0.8
 
 
+def transform_to_rect(rect, original, output_shape):
+    output_points = sort_vertices(
+        np.asarray(
+            [
+                [0, 0],
+                [output_shape[1], 0],
+                [output_shape[1], output_shape[0]],
+                [0, output_shape[0]],
+            ]
+        )
+    ).astype(np.float32)
+    transform = cv2.getPerspectiveTransform(rect.astype(np.float32), output_points)
+    return cv2.warpPerspective(
+        original, transform, output_shape[1::-1], flags=cv2.INTER_CUBIC
+    )
+
+
 def class_matches(correlations, classes):
     i = np.argmax(correlations)
     if correlations[i] > MATCH_THRESHOLD:
@@ -84,38 +96,9 @@ def number_slice(image):
     return image[image.shape[0] * 2 / 3 :, image.shape[1] / 2 :]
 
 
-def draw_rects(image, rects):
-    draw = image.copy()
-    for r in rects:
-        perturbation = [random.randint(-3, 3), random.randint(-3, 3)]  # Reduce overlap
-        draw = cv2.polylines(draw, [r + perturbation], True, random_colour(), 2)
-    return draw
-
-
-def random_colour():
-    h = random.randint(0, 255)
-    s = random.randint(127, 255)
-    v = random.randint(127, 255)
-    point = np.uint8([[[h, s, v]]])
-    return tuple(int(c) for c in cv2.cvtColor(point, cv2.COLOR_HSV2BGR)[0, 0])
-
-
-rect_pub = rospy.Publisher("/hippos/debug/rects", sensor_msgs.msg.Image, queue_size=1)
-bridge = cv_bridge.CvBridge()
-
-
-def predict(lines, edges, bottom, debug=False):
-    rects = rectangles.rects_from_lines(lines)
-    rect = rectangles.take_max_edge_score(rects, edges)
-    if rect is None:
-        return
-    if debug:
-        rect_pub.publish(
-            bridge.cv2_to_imgmsg(draw_rects(bottom, [rect]), encoding="bgr8")
-        )
-
+def predict(rect, bottom, debug=False):
     l, a, b = cv2.split(cv2.cvtColor(bottom, cv2.COLOR_BGR2Lab))
-    warped = rectangles.transform_to_rect(rect, l, original_shape)
+    warped = transform_to_rect(rect, l, original_shape)
     location_correlation = []
     for location in locations:
         correlation = cv2.matchTemplate(

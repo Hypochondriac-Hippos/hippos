@@ -18,8 +18,8 @@ bridge = cv_bridge.CvBridge()
 
 
 def process_frame(in_msg, score):
-    lines, edges, bottom = util.destringify(in_msg)
-    prediction = read.predict(lines, edges, bottom, debug=True)
+    rects, bottom = util.destringify(in_msg)
+    prediction = read.predict(rects, bottom, debug=True)
 
     print("{} {}".format(datetime.datetime.now().isoformat(), prediction))
     if prediction is not None:
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     rospy.init_node("reader", anonymous=True)
     score = rospy.Publisher(util.topics.plates, std_msgs.msg.String, queue_size=1)
     rospy.Subscriber(
-        util.plate_topics.lines, std_msgs.msg.String, process_frame, callback_args=score
+        util.plate_topics.rects, std_msgs.msg.String, process_frame, callback_args=score
     )
 
     time.sleep(1)
