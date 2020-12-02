@@ -21,31 +21,45 @@ def plate_message(location, plate_number):
     return "Hippos,MitiFizz,{},{}".format(location, plate_number)
 
 
-def move(vel_msg, x=0.0,y=0.0,z=0.0,xR=0.0,yR=0.0,zR=0.0):
-
-    vel_msg.linear.x = x
-    vel_msg.linear.y = y
-    vel_msg.linear.z = z
-    vel_msg.angular.x = xR
-    vel_msg.angular.y = yR
-    vel_msg.angular.z = zR
-
-
 if __name__ == "__main__":
     rospy.init_node("controller", anonymous=True)
     plates = rospy.Publisher(topics.plates, std_msgs.msg.String, queue_size=1)
     drive = rospy.Publisher(topics.drive, Twist, queue_size=1)
 
-    rate = rospy.Rate(0.5)
-
     time.sleep(1)
     vel_msg = Twist()
     plates.publish(plate_message(0, "AA00"))
+
+    # Brute force circuit
+    vel_msg.linear.x = 0.272
+    drive.publish(vel_msg)
+    rospy.sleep(1.29)
+
+    vel_msg.linear.x = 0
+    vel_msg.angular.z = 1.1
+    drive.publish(vel_msg)
+    rospy.sleep(1.68)
+
+    vel_msg.linear.x = 0.1
+    vel_msg.angular.z = 0
+    drive.publish(vel_msg)
+    rospy.sleep(11.1)
+
     while not rospy.is_shutdown():
-        vel_msg.linear.x = 0.25
-        vel_msg.angular.z = -0.05
+        vel_msg.linear.x = 0.1
+        vel_msg.angular.z = 1.17
         drive.publish(vel_msg)
-        rate.sleep()
+        rospy.sleep(1.6)
+
+        vel_msg.linear.x = 0.1
+        vel_msg.angular.z = 0
+        drive.publish(vel_msg)
+        rospy.sleep(10.75)
+
+        vel_msg.linear.x = 0.3
+        drive.publish(vel_msg)
+        rospy.sleep(4)
+
 
 
 
