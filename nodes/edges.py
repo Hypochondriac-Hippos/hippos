@@ -50,7 +50,7 @@ def find_contours(binary):
     )[1]
 
 
-def filter_contours(contours, min_area=500, min_solidity=0.7):
+def filter_contours(contours, min_area=1000, min_solidity=0.7):
     return [
         c
         for c in contours

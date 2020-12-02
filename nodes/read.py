@@ -56,6 +56,8 @@ locations = [
     for n in string.digits[1:9]
 ]
 
+already_read = set()
+
 original_shape = (int(1800 * scale), int(600 * scale))
 
 MATCH_THRESHOLD = 0.75
@@ -109,7 +111,7 @@ def predict(rect, bottom, debug=False):
         location_correlation.append(correlation.max())
 
     loc = class_matches(location_correlation, string.digits[1:9])
-    if loc is None:
+    if loc is None or loc in already_read:
         return
 
     number1_correlation = []
@@ -142,4 +144,5 @@ def predict(rect, bottom, debug=False):
     letter2 = class_matches(letter2_correlation, string.ascii_uppercase)
 
     if letter1 is not None and letter2 is not None:
+        already_read.add(loc)
         return (loc, "".join((letter1, letter2, number1, number2)))
