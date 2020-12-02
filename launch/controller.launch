@@ -1,4 +1,5 @@
 <launch>
+  <node pkg="hippos" type="grey.py" name="grey" output="screen" />
   <node pkg="hippos" type="reader.py" name="reader" output="screen" />
   <node pkg="hippos" type="time_trials.py" name="time_trials" output="screen" />
 </launch>
