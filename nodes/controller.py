@@ -1,6 +1,5 @@
 #!/usr/bin/env python2
 
-from collections import namedtuple
 import time
 
 import rospy
@@ -9,65 +8,50 @@ import std_msgs
 import numpy as np
 import cv2
 from sensor_msgs.msg import Image
-from cv_bridge import CvBridge, CvBridgeError
+import cv_bridge
 
-topics = namedtuple("Topics", ("camera", "clock", "drive", "plates", "warning"))(
-    "/R1/pi_camera/image_raw", "/clock", "/R1/cmd_vel", "/license_plate", "/hippos/pedestrian"
-)
+import util
 
-nav_vals = {"Set Points": (329, 261), "Prev_vals": (0, 0)}
-
-ped_flag = False
-
-bridge = CvBridge()
+bridge = cv_bridge.CvBridge()
+road_lines_pub = rospy.Publisher("/hippos/debug/road_lines", Image, queue_size=1)
+drive = rospy.Publisher(util.topics.drive, Twist, queue_size=1)
 
 
-def img_callback(data):
-    global nav_vals
-    try:
-        cv_image = bridge.imgmsg_to_cv2(data, "bgr8")
-        smoothed = cv2.GaussianBlur(cv_image, (5, 5), 0)
-        edges = cv2.Canny(smoothed, 40, 80)
-        cropped_edges = edges[:, 850:]
-        x1 = np.argmax(cropped_edges[719])
-        x2 = np.argmax(cropped_edges[672])
+def img_callback(ros_image):
+    frame = bridge.imgmsg_to_cv2(ros_image)
+    h, s, v = cv2.split(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV))
+    road_lines = np.logical_and(s < 50, v > 150)
+    road_lines_pub.publish(bridge.cv2_to_imgmsg(road_lines.astype(np.uint8) * 255))
 
-        nav_vals["Prev_vals"] = (x1, x2)
-    except CvBridgeError as e:
-        print(e)
+    move = Twist()
+    move.angular.z = steer(road_lines)
+    move.linear.x = 0.1 if move.angular.z == 0 else 0
+    drive.publish(move)
 
 
-def steer():
-    global nav_vals
-    dx1 = nav_vals["Set Points"][0]-nav_vals["Prev_vals"][0]
-    dx2 = nav_vals["Set Points"][1]-nav_vals["Prev_vals"][1]
-    if dx1 > 20:
-        if dx2 > 20:
-            z = -0.1
-        elif dx2 < -20:
-            z = 0.5
-        else:
-            z = 0.2
-    elif dx1 < -20:
-        if dx2 > 20:
-            z = -0.5
-        elif dx2 < -20:
-            z = 0.5
-        else:
-            z = -0.2
-    else:
-        z = 0
+def steer(road_lines):
+    if road_lines[-1, -1]:
+        return 0
 
-    return z
+    magnitude = 1
 
+    bottom_row_on = road_lines[-1].nonzero()[0]
+    right_row_on = road_lines[:, -1].nonzero()[0]
+    rightmost = bottomest = None
+    if len(bottom_row_on) > 0:
+        rightmost = road_lines.shape[1] - bottom_row_on.max()
+    if len(right_row_on) > 0:
+        bottomest = road_lines.shape[0] - right_row_on.max()
 
-def ped_warning(data):
-    global ped_flag
-    if data is "True":
-        ped_flag = True
-    else:
-        ped_flag = False
-
+    if rightmost is None and bottomest is None:
+        return 0
+    if rightmost is None and bottomest is not None:
+        return -magnitude
+    if rightmost is not None and bottomest is None:
+        return magnitude
+    if rightmost < bottomest:
+        return magnitude
+    return -magnitude
 
 
 def plate_message(location, plate_number):
@@ -77,10 +61,8 @@ def plate_message(location, plate_number):
 
 if __name__ == "__main__":
     rospy.init_node("controller", anonymous=True)
-    plates = rospy.Publisher(topics.plates, std_msgs.msg.String, queue_size=1)
-    drive = rospy.Publisher(topics.drive, Twist, queue_size=1)
-    camera = rospy.Subscriber(topics.camera, Image, img_callback)
-    warning = rospy.Subscriber(topics.warning, std_msgs.msg.String, queue_size=1)
+    plates = rospy.Publisher(util.topics.plates, std_msgs.msg.String, queue_size=1)
+    warning = rospy.Subscriber(util.topics.warning, std_msgs.msg.String, queue_size=1)
 
     global ped_flag
 
@@ -101,41 +83,7 @@ if __name__ == "__main__":
     vel_msg.angular.z = 0
     drive.publish(vel_msg)
 
-    # vel_msg.linear.x = 0.1
-    # drive.publish(vel_msg)
-    # rospy.sleep(0.2)
-    # vel_msg.angular.z = 0
-    # drive.publish(vel_msg)
-    # rospy.sleep(11.1)
-
-    while not rospy.is_shutdown():
-        # if ped_flag:
-        #     vel_msg.linear.x = 0
-        #     vel_msg.angular.z = 0
-        #     drive.publish(vel_msg)
-        #     rospy.sleep(0.1)
-        # else:
-        #     vel_msg.linear.x = 0.1
-        #     vel_msg.angular.z = steer()
-            print(str(nav_vals))
-        #     drive.publish(vel_msg)
-        #     rospy.sleep(0.5)
-            # vel_msg.linear.x = 0.1
-            # vel_msg.angular.z = 1.17
-            # drive.publish(vel_msg)
-            rospy.sleep(1.6)
-            #
-            # vel_msg.linear.x = 0.1
-            # vel_msg.angular.z = 0
-            # drive.publish(vel_msg)
-            # rospy.sleep(10.75)
-            #
-            # vel_msg.linear.x = 0.3
-            # drive.publish(vel_msg)
-            # rospy.sleep(4)
-
-
-
+    camera = rospy.Subscriber(util.topics.camera, Image, img_callback)
+    rospy.spin()
 
     plates.publish(plate_message(-1, "AA00"))
-

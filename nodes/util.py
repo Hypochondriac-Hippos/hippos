@@ -6,8 +6,12 @@ import os
 
 import cv2
 
-topics = namedtuple("Topics", ("camera", "clock", "drive", "plates"))(
-    "/R1/pi_camera/image_raw", "/clock", "/R1/cmd_vel", "/license_plate"
+topics = namedtuple("Topics", ("camera", "clock", "drive", "plates", "warning"))(
+    "/R1/pi_camera/image_raw",
+    "/clock",
+    "/R1/cmd_vel",
+    "/license_plate",
+    "/hippos/pedestrian",
 )
 
 plate_topics = namedtuple("PlateTopics", ("edges", "lines", "rects"))(
