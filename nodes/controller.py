@@ -5,19 +5,34 @@ import time
 import rospy
 from geometry_msgs.msg import Twist
 import std_msgs
+import scipy.signal
 import numpy as np
 import cv2
 from sensor_msgs.msg import Image
 import cv_bridge
 
 import util
+import pedestrian
 
 bridge = cv_bridge.CvBridge()
 road_lines_pub = rospy.Publisher("/hippos/debug/road_lines", Image, queue_size=1)
 drive = rospy.Publisher(util.topics.drive, Twist, queue_size=1)
 
+pedestrian_flag = False
+
+mode = "normal"
+
+
+def at_crosswalk(frame):
+    a = cv2.split(cv2.cvtColor(frame, cv2.COLOR_BGR2LAB))[1]
+    red = a > 200
+    row_sums = red.sum(axis=0)
+    peaks, _ = scipy.signal.find_peaks(row_sums)
+    return red[-1].any() and len(peaks) > 1
+
 
 def img_callback(ros_image):
+    global mode
     frame = bridge.imgmsg_to_cv2(ros_image)
     h, s, v = cv2.split(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV))
     road_lines = np.logical_and(s < 50, v > 150)
@@ -25,7 +40,23 @@ def img_callback(ros_image):
 
     move = Twist()
     move.angular.z = steer(road_lines)
-    move.linear.x = 0.1 if move.angular.z == 0 else 0
+    if mode == "normal":
+        move.linear.x = 0.1
+        if at_crosswalk(frame):
+            mode = "wait_for_ped"
+            move.linear.x = 0
+        if move.angular.z != 0:
+            move.linear.x = 0
+    elif mode == "wait_for_ped":
+        if pedestrian.is_pedestrian(frame):
+            mode = "wait_for_no_ped"
+    elif mode == "wait_for_no_ped":
+        if not pedestrian.is_pedestrian(frame):
+            move.linear.x = 0.2
+            drive.publish(move)
+            mode = "normal"
+            rospy.sleep(1)
+
     drive.publish(move)
 
 
@@ -54,6 +85,11 @@ def steer(road_lines):
     return -magnitude
 
 
+def set_warning(message):
+    global pedestrian_flag
+    pedestrian_flag = util.destringify(message)
+
+
 def plate_message(location, plate_number):
     """Format a message for the license plate scorer"""
     return "Hippos,MitiFizz,{},{}".format(location, plate_number)
@@ -62,9 +98,7 @@ def plate_message(location, plate_number):
 if __name__ == "__main__":
     rospy.init_node("controller", anonymous=True)
     plates = rospy.Publisher(util.topics.plates, std_msgs.msg.String, queue_size=1)
-    warning = rospy.Subscriber(util.topics.warning, std_msgs.msg.String, queue_size=1)
-
-    global ped_flag
+    warning = rospy.Subscriber(util.topics.warning, std_msgs.msg.String, set_warning)
 
     time.sleep(1)
     vel_msg = Twist()

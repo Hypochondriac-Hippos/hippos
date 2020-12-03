@@ -23,8 +23,7 @@ feature_pub = rospy.Publisher(
 )
 
 
-def process_frame(ros_image, debug=True):
-    frame = bridge.imgmsg_to_cv2(ros_image)
+def is_pedestrian(frame, debug=True):
     l, a, b = cv2.split(cv2.cvtColor(frame, cv2.COLOR_BGR2LAB))
     red = a > 200
     if debug:
@@ -41,7 +40,7 @@ def process_frame(ros_image, debug=True):
         red_pub.publish(bridge.cv2_to_imgmsg(display))
 
     if np.count_nonzero(red) < 10:
-        warning.publish(util.stringify(False))
+        return False
     if np.count_nonzero(red) > 10:
         top = min(np.nonzero(red)[0])
         bottom = max(np.nonzero(red)[0])
@@ -49,8 +48,7 @@ def process_frame(ros_image, debug=True):
         top_line = red[top : top + 10]
         bottom_line = red[bottom - 50 : bottom]
         if len(top_line) == 0 or len(bottom_line == 0):
-            warning.publish(util.stringify(False))
-            return
+            return False
 
         top_left = min(np.nonzero(red[top : top + 10])[1])
         top_right = max(np.nonzero(red[top : top + 10])[1])
@@ -79,12 +77,17 @@ def process_frame(ros_image, debug=True):
             np.logical_and(walk_mask[crosswalk], b[crosswalk] > 130), a[crosswalk] > 100
         )
 
-        warning.publish(util.stringify(person_in_walk.any()))
-
         if debug:
             feature_pub.publish(
                 bridge.cv2_to_imgmsg((person_in_walk).astype(np.uint8) * 255)
             )
+
+        return person_in_walk.any()
+
+
+def process_frame(ros_image, debug=True):
+    frame = bridge.imgmsg_to_cv2(ros_image)
+    warning.publish(util.stringify(is_pedestrian(frame, debug)))
 
 
 if __name__ == "__main__":
