@@ -47,7 +47,7 @@ def is_pedestrian(frame, debug=True):
 
         top_line = red[top : top + 10]
         bottom_line = red[bottom - 50 : bottom]
-        if len(top_line) == 0 or len(bottom_line == 0):
+        if len(top_line) == 0 or len(bottom_line) == 0:
             return False
 
         top_left = min(np.nonzero(red[top : top + 10])[1])

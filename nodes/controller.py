@@ -54,8 +54,12 @@ def img_callback(ros_image):
         if not pedestrian.is_pedestrian(frame):
             move.linear.x = 0.2
             drive.publish(move)
+            mode = "clear"
+    elif mode == "clear":
+        a = cv2.split(cv2.cvtColor(frame, cv2.COLOR_BGR2LAB))[1] > 200
+        if not a.any():
             mode = "normal"
-            rospy.sleep(1)
+        move.linear.x = 0.2
 
     drive.publish(move)
 
@@ -118,6 +122,6 @@ if __name__ == "__main__":
     drive.publish(vel_msg)
 
     camera = rospy.Subscriber(util.topics.camera, Image, img_callback)
-    rospy.spin()
+    rospy.sleep(200)
 
     plates.publish(plate_message(-1, "AA00"))
