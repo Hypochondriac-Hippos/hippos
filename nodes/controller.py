@@ -19,18 +19,15 @@ nav_vals = {"Set Points": (329, 261), "Prev_vals": (0, 0)}
 
 ped_flag = False
 
-shape = "No Read"
 bridge = CvBridge()
 
 
 def img_callback(data):
     global nav_vals
-    global shape
     try:
         cv_image = bridge.imgmsg_to_cv2(data, "bgr8")
         smoothed = cv2.GaussianBlur(cv_image, (5, 5), 0)
-        shape = cv_image.shape
-        edges = cv2.Canny(smoothed, 50, 80)
+        edges = cv2.Canny(smoothed, 40, 80)
         cropped_edges = edges[:, 850:]
         x1 = np.argmax(cropped_edges[719])
         x2 = np.argmax(cropped_edges[672])
@@ -101,28 +98,32 @@ if __name__ == "__main__":
     drive.publish(vel_msg)
     rospy.sleep(1.68)
 
-    vel_msg.linear.x = 0.1
+    vel_msg.angular.z = 0
     drive.publish(vel_msg)
-    rospy.sleep(0.2)
+
+    # vel_msg.linear.x = 0.1
+    # drive.publish(vel_msg)
+    # rospy.sleep(0.2)
     # vel_msg.angular.z = 0
     # drive.publish(vel_msg)
     # rospy.sleep(11.1)
 
     while not rospy.is_shutdown():
-        if ped_flag:
-            vel_msg.linear.x = 0
-            drive.publish(vel_msg)
-            rospy.sleep(0.1)
-        else:
-            vel_msg.linear.x = 0.1
-            vel_msg.angular.z = steer()
+        # if ped_flag:
+        #     vel_msg.linear.x = 0
+        #     vel_msg.angular.z = 0
+        #     drive.publish(vel_msg)
+        #     rospy.sleep(0.1)
+        # else:
+        #     vel_msg.linear.x = 0.1
+        #     vel_msg.angular.z = steer()
             print(str(nav_vals))
-            drive.publish(vel_msg)
-            rospy.sleep(0.5)
+        #     drive.publish(vel_msg)
+        #     rospy.sleep(0.5)
             # vel_msg.linear.x = 0.1
             # vel_msg.angular.z = 1.17
             # drive.publish(vel_msg)
-            # rospy.sleep(1.6)
+            rospy.sleep(1.6)
             #
             # vel_msg.linear.x = 0.1
             # vel_msg.angular.z = 0
